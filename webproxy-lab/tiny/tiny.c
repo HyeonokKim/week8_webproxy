@@ -78,11 +78,26 @@ void doit(int fd) // fd : 클라이언트와 연결된 소켓 descriptor
   rio_requesthdrs(&rio);
 
   // URI를 실제 처리 가능한 서버 내부 정보로 바꾸겠다
-  is_static = parse_uri(uri, filename,  cgiargs);
+  is_static = parse_uri(uri, filename,  cgiargs); //static이면 filename을, dynamic이면 ?뒤를 cgiargs로 분리 
   // stat으로 해당 filename의 상태를 읽어와라
   if (stat(filename, &buf) < 0) {
     clienterror(fd, filename, "404", "Not found", "Tiny coudln't find this file");
     return;
+  }
+
+  // parse_uri 결과가 static인 경우 : 파일을 보내기 전에 안정성/유효성 검사 
+  if(is_static) { 
+    if(!(IS_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) { // 일반파일인가 or 소유자 읽기 권한이 있는가
+      clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
+      return;
+    }
+    serve_static(fd, filename, sbuf.st_size); // 검사 통과했으면 정적 파일 보냄
+  } else {
+    if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)){ // 일반파일인가 or 실행 권한이 있는가
+      clienterror(fd, filenmae, "403", "Forbidden","Tiny couldn't run the CGI program");
+      return;
+    }
+    serve_dynamic(fd, filename, cgiargs);
   }
 
 
